@@ -33,7 +33,71 @@ $seller_details = $query_res -> fetch_assoc();
 $query = "SELECT * from listing where listing_id = $listing_id";
 $query_res = mysqli_query($db, $query);
 $listing_details = $query_res -> fetch_assoc();
+$latest_bid_amount = $listing_details['latest_bid_amount'];
+$is_active_listing = $listing_details['is_active_listing']
 ?>
+
+<?php
+
+$bid_set = get_list_of_bids($db, $_GET['listing_id']);  // uses the function created in deji_query_functions.php to get the results of the query
+
+?>
+
+<script>
+
+    // Set the date we're counting down to
+    var countDownDate = new Date("<?php echo $listing_details['end_time']?>").getTime();
+
+    // Update the count down every 1 second
+    var x = setInterval(function() {
+
+        // Get today's date and time
+        var now = new Date().getTime();
+
+        // Find the distance between now and the count down date
+        var distance = countDownDate - now;
+
+        // Time calculations for days, hours, minutes and seconds
+        var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        // Display the result in the element with id="demo"
+        document.getElementById("timer").innerHTML = days + "d " + hours + "h "
+            + minutes + "m " + seconds + "s";
+
+        // If the count down is finished, set listing to expired
+        if (distance < 0) {
+            clearInterval(x);
+            document.getElementById("timer").innerHTML = "Listing Expired";
+
+            // Update database with winning bid
+
+            var httpRequest = new XMLHttpRequest();
+
+            if (!httpRequest) {
+                alert('Giving up :( Cannot create an XMLHTTP instance');
+                return false;
+            }
+            httpRequest.onreadystatechange = alertContents;
+            httpRequest.open('POST', '<?php echo url_for('/html/set_winning_bid.php') ?>');
+            httpRequest.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            httpRequest.send('listing_id=' + encodeURIComponent(<?php echo $listing_id?>) + '&latest_bid_amount=' +  encodeURIComponent(<?php echo $latest_bid_amount?>) + '&is_active_listing=' + encodeURIComponent(<?php echo $is_active_listing?>));
+
+            function alertContents() {
+                if (httpRequest.readyState === XMLHttpRequest.DONE) {
+                    if (httpRequest.status === 200) {
+                        console.log('successful ajax call', httpRequest.response);
+                    } else {
+                        console.log('unsuccessful ajax call', httpRequest.response);
+                    }
+                }
+            }
+
+        }
+    }, 1000);
+</script>
 
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
@@ -91,6 +155,51 @@ $listing_details = $query_res -> fetch_assoc();
         </div>
     </div>
 
+<!--modal to view bids for this item button-->
+
+
+<div class="modal fade" id="currentbidsModal" tabindex="-1" role="dialog" aria-labelledby="currentbidsModal" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5  style="text-align:center" class="modal-title" id="exampleModalLongTitle">Bids for this item</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <table class="table">
+                    <!-- table has been inserted into card-->
+                    <thead class="thead-dark">
+                    <th style="text-align:center" >Bid Price</th>
+                    <th style="text-align:center" >Time of Bid</th>
+                    <th style="text-align:center" >Bidder</th>
+                    <th style="text-align:center" ></th>
+
+                    </thead>
+                    <tbody>
+                    <?php while($bid = mysqli_fetch_assoc($bid_set)) {
+                        $bidder = $bid['bidder_fk'];
+                        $res = mysqli_query($db, "SELECT username from user where user_fk = $bidder");
+                        $bidder = $res -> fetch_assoc();
+                        $bidder = $bidder['username']
+                        ?>   <!-- while able to fetch a result from the bid_set, go through each and get username, bid amount and timestamp-->
+                        <tr>
+                            <td style="text-align:center" ><?php echo "£" . $bid['bid_amount']; ?></td>
+                            <td style="text-align:center" ><?php echo $bid['bid_timestamp']; ?></td>
+                            <td style="text-align:center" ><?php echo $bidder; ?></td>
+                        </tr>
+                    <?php } ?>
+                    </tbody>
+                </table>
+        </div>
+    </div>
+</div>
+</div>
+
+
+<!----------------------------------------------------->
+
     <div class="modal fade" id="sendMessage" tabindex="-1" role="dialog" aria-labelledby="sendMessage" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
@@ -136,11 +245,12 @@ $listing_details = $query_res -> fetch_assoc();
     </div>
     <div class="row my-4">
     <div class="col-sm-5">
-            <img id="item-display" src="https://media.karousell.com/media/photos/products/2018/10/06/corsair_gs600_80plus_psu_1538780922_81e254d1.jpg" height="375" width="450" alt=""></img>
+        <img id="item-display" src="<?php echo url_for('/html/' . $item_details['image_location']) ?> " height="375" width="450" alt=""/>
     </div>
 
     <div class="col-sm-7">
-        <div class="h5"><?php echo $item_details['item_name'] ?> </div>
+        <div class="h5"><?php echo $item_details['item_name'] . "  "?></div>
+        <div>Time remaining: <span id="timer"></span></div>
         <hr>
         <div class="row">
             <div class="col-md-6">
@@ -151,17 +261,9 @@ $listing_details = $query_res -> fetch_assoc();
             <div class="col-md-6">
                 <div class="product-price">Start date: <span><strong><?php echo $listing_details['start_time']?></strong></span></div>
                 <div class="product-price">End date: <span><strong><?php echo $listing_details['end_time']?></strong></span></div>
-                <div class="product-price">Number of watchers: <span><strong><?php echo $listing_details['number_watching']?></strong></span></div>
             </div>
         </div>
 
-
-
-        <div class="btn-group cart">
-            <button type="button" class="btn btn-success">
-                <i class="fas fa-shopping-bag mr-2"></i>Buy now
-            </button>
-        </div>
         <div class="btn-group cart">
             <button type="button" class="btn btn-success" data-toggle="modal" data-target="#bidModal">
                 <i class="fas fa-credit-card mr-2"></i>Make bid
@@ -169,22 +271,35 @@ $listing_details = $query_res -> fetch_assoc();
         </div>
         <div class="btn-group wishlist my-2">
             <?php
-            $user_id = $_SESSION['user_id'];
+            $user_id = $_SESSION['user_id'] ?? '';
             $qry = "SELECT * from watchlist where user_fk = $user_id AND listing_watched_fk = $listing_id";
             $res = mysqli_query($db, $qry);?>
-            <?php if ($res -> num_rows == 0): ?>
+            <?php if (isset($_SESSION['user_id']) && $res -> num_rows == 0): ?>
                 <form class="mt-3" action="<?php echo "product_listing.php?item_id=" . $item_id . "&listing_id=" . $listing_id ?>" method="post">
                     <button type="submit" name="watch" id="watch" class="btn btn-outline-dark">
                         <i class="fas fa-eye mr-2"></i>Watch item
                     </button>
                 </form>
-            <?php else : ?>
+            <?php elseif (isset($_SESSION['user_id'])) : ?>
                 <form class="mt-3" action="<?php echo "product_listing.php?item_id=" . $item_id . "&listing_id=" . $listing_id ?>" method="post">
                     <button type="submit" name="unwatch" id="unwatch" class="btn btn-outline-dark">
                         <i class="fas fa-eye mr-2"></i>Unwatch
                     </button>
                 </form>
+            <?php else: ?>
+                <form class="mt-3" action="<?php echo "login.php" ?>">
+                    <button class="btn btn-outline-dark">
+                        <i class="fas fa-eye mr-2"></i>Login to Watch Item
+                    </button>
+                </form>
               <?php endif ?>
+        </div>
+
+         <div class="btn-group bidsforthisitem">
+
+             <button type="button" class="btn btn-success" data-toggle="modal" data-target="#currentbidsModal">
+                 Current Bids
+             </button>
         </div>
         <!-- Card -->
 
